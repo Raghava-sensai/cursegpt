@@ -154,6 +154,38 @@ button.danger {
   grid-template-columns: minmax(280px, 0.8fr) minmax(360px, 1.2fr);
 }
 
+.overview {
+  display: grid;
+  gap: 16px;
+}
+
+.metricGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+}
+
+.metric {
+  background: #ffffff;
+  border: 1px solid #dce3d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.metric span {
+  color: #667066;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.metric strong {
+  color: #1f5f4a;
+  font-size: 32px;
+  line-height: 1;
+}
+
 .panel {
   background: #ffffff;
   border: 1px solid #dce3d8;
@@ -240,6 +272,55 @@ textarea {
 .checkboxLabel input {
   min-height: 0;
   width: auto;
+}
+
+.flowPanel {
+  gap: 18px;
+}
+
+.flow {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+}
+
+.flowStep {
+  background: #f7faf6;
+  border: 1px solid #dce3d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 14px;
+  position: relative;
+}
+
+.flowStep:not(:last-child)::after {
+  color: #7ea28f;
+  content: ">";
+  font-weight: 900;
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.flowStep strong {
+  color: #1f5f4a;
+}
+
+.flowStep span {
+  color: #465249;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.plainList {
+  color: #465249;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .table {
@@ -334,6 +415,15 @@ textarea {
   .shell,
   .grid.two {
     grid-template-columns: 1fr;
+  }
+
+  .metricGrid,
+  .flow {
+    grid-template-columns: 1fr;
+  }
+
+  .flowStep:not(:last-child)::after {
+    content: "";
   }
 
   .sidebar {

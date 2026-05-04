@@ -7,9 +7,10 @@ React + Vite dashboard for the Cloudflare email automation Worker.
 
 - Framework preset: `Vite`
 - Root directory: `dashboard`
-- Install command: `npm install`
+- Install command: `npm ci`
 - Build command: `npm run build`
 - Output directory: `dist`
+- Node.js version: `20.x`
 
 ## Environment Variables
 

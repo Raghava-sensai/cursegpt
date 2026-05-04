@@ -53,6 +53,9 @@ export interface DashboardUser {
   email: string;
   name: string | null;
   role: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastLoginAt?: string | null;
 }
 
 export interface LoginResult {

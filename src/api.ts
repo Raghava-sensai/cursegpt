@@ -59,6 +59,22 @@ export async function getCurrentUser(): Promise<DashboardUser> {
   return request<DashboardUser>("/auth/me");
 }
 
+export async function listUsers(): Promise<DashboardUser[]> {
+  return request<DashboardUser[]>("/users");
+}
+
+export async function createUser(input: {
+  email: string;
+  name?: string;
+  role: string;
+  password: string;
+}): Promise<DashboardUser> {
+  return request<DashboardUser>("/users", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function listTriggers(): Promise<Trigger[]> {
   return request<Trigger[]>("/triggers");
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   clearAuthToken,
+  createUser,
   createTrigger,
   deleteTrigger,
   getAuthToken,
@@ -8,6 +9,7 @@ import {
   listLogs,
   listTemplates,
   listTriggers,
+  listUsers,
   login,
   previewTestEvent,
   sendTestEvent,
@@ -17,7 +19,7 @@ import {
 import type { DashboardUser, EmailLog, EmailPreview, EmailTemplate, TestEventPayload, Trigger } from "./types";
 import { EVENT_TYPES } from "./types";
 
-type View = "triggers" | "templates" | "logs" | "test";
+type View = "overview" | "triggers" | "templates" | "logs" | "test" | "users";
 type EventType = (typeof EVENT_TYPES)[number];
 interface TriggerDraft {
   workspaceId: string;
@@ -29,13 +31,14 @@ interface TriggerDraft {
 }
 
 export function App() {
-  const [view, setView] = useState<View>("triggers");
+  const [view, setView] = useState<View>("overview");
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [status, setStatus] = useState<string>("Loading workspace data...");
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<DashboardUser | null>(null);
+  const [users, setUsers] = useState<DashboardUser[]>([]);
   const [authReady, setAuthReady] = useState(false);
 
   async function refresh() {
@@ -54,6 +57,9 @@ export function App() {
       setTemplates(nextTemplates);
       setLogs(nextLogs);
       setStatus("Workspace data loaded.");
+      if (user?.role === "admin") {
+        setUsers(await listUsers());
+      }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
       setStatus("Unable to load workspace data.");
@@ -82,6 +88,10 @@ export function App() {
   }, [user?.id]);
 
   const activeView = useMemo(() => {
+    if (view === "overview") {
+      return <OverviewPage triggers={triggers} templates={templates} logs={logs} />;
+    }
+
     if (view === "triggers") {
       return (
         <TriggerManagement
@@ -123,6 +133,18 @@ export function App() {
       return <DeliveryLogs logs={logs} onRefresh={refresh} />;
     }
 
+    if (view === "users" && user?.role === "admin") {
+      return (
+        <UsersPage
+          users={users}
+          onCreate={async (input) => {
+            const created = await createUser(input);
+            setUsers((current) => [created, ...current]);
+          }}
+        />
+      );
+    }
+
     return (
       <TestEventSender
         onSend={async (payload) => {
@@ -132,7 +154,7 @@ export function App() {
         onPreview={previewTestEvent}
       />
     );
-  }, [logs, templates, triggers, user, view]);
+  }, [logs, templates, triggers, user, users, view]);
 
   if (!authReady) {
     return <main className="authShell"><div className="panel">Checking session...</div></main>;
@@ -157,6 +179,9 @@ export function App() {
           <h1>Email Automation</h1>
         </div>
         <nav className="nav" aria-label="Dashboard views">
+          <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>
+            Overview
+          </button>
           <button className={view === "triggers" ? "active" : ""} onClick={() => setView("triggers")}>
             Triggers
           </button>
@@ -169,6 +194,11 @@ export function App() {
           <button className={view === "test" ? "active" : ""} onClick={() => setView("test")}>
             Test Event
           </button>
+          {user.role === "admin" ? (
+            <button className={view === "users" ? "active" : ""} onClick={() => setView("users")}>
+              Users
+            </button>
+          ) : null}
         </nav>
       </aside>
 
@@ -199,6 +229,88 @@ export function App() {
         {activeView}
       </section>
     </main>
+  );
+}
+
+function OverviewPage({
+  triggers,
+  templates,
+  logs,
+}: {
+  triggers: Trigger[];
+  templates: EmailTemplate[];
+  logs: EmailLog[];
+}) {
+  const sentCount = logs.filter((log) => log.status === "sent").length;
+  const retryCount = logs.filter((log) => log.status === "retrying").length;
+  const activeRules = triggers.filter((trigger) => trigger.enabled).length;
+
+  return (
+    <div className="overview">
+      <section className="metricGrid">
+        <div className="metric">
+          <span>Active Rules</span>
+          <strong>{activeRules}</strong>
+        </div>
+        <div className="metric">
+          <span>Templates</span>
+          <strong>{templates.length}</strong>
+        </div>
+        <div className="metric">
+          <span>Sent Emails</span>
+          <strong>{sentCount}</strong>
+        </div>
+        <div className="metric">
+          <span>Retrying</span>
+          <strong>{retryCount}</strong>
+        </div>
+      </section>
+
+      <section className="panel flowPanel">
+        <div>
+          <p className="eyebrow">Background Worker Flow</p>
+          <h3>How an email moves through the system</h3>
+        </div>
+        <div className="flow">
+          <FlowStep title="Dashboard" detail="Creates rules, edits templates, and sends manual test events." />
+          <FlowStep title="Worker API" detail="Authenticates requests, validates payloads, checks rules, and stores config in D1." />
+          <FlowStep title="KV Guardrails" detail="Deduplication and cooldown keys prevent duplicate or noisy sends." />
+          <FlowStep title="Cloudflare Queue" detail="Accepted jobs move off the request path for durable background processing." />
+          <FlowStep title="Queue Consumer" detail="A background Worker reads jobs, renders the D1 template, and retries failures." />
+          <FlowStep title="Gmail API" detail="The provider sends the final MIME email through OAuth2-authenticated Gmail delivery." />
+        </div>
+      </section>
+
+      <section className="grid two">
+        <div className="panel">
+          <h3>What You See</h3>
+          <ul className="plainList">
+            <li>Rules define which events should trigger emails.</li>
+            <li>Templates define the subject, text body, and HTML body.</li>
+            <li>Test Event lets you preview the rendered email before queueing it.</li>
+            <li>Logs show the background consumer’s delivery result.</li>
+          </ul>
+        </div>
+        <div className="panel">
+          <h3>What Runs In Background</h3>
+          <ul className="plainList">
+            <li>The API Worker responds quickly after queueing a valid job.</li>
+            <li>The Queue consumer Worker sends email outside the dashboard request.</li>
+            <li>Retryable Gmail errors are retried with backoff.</li>
+            <li>D1 keeps the audit trail for delivery status and errors.</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FlowStep({ title, detail }: { title: string; detail: string }) {
+  return (
+    <article className="flowStep">
+      <strong>{title}</strong>
+      <span>{detail}</span>
+    </article>
   );
 }
 
@@ -239,6 +351,85 @@ function LoginPage({ onLogin }: { onLogin(email: string, password: string): Prom
         <div className="status compact">{status}</div>
       </form>
     </main>
+  );
+}
+
+function UsersPage({
+  users,
+  onCreate,
+}: {
+  users: DashboardUser[];
+  onCreate(input: { email: string; name?: string; role: string; password: string }): Promise<void>;
+}) {
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("member");
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState("Register a dashboard user into D1.");
+
+  return (
+    <div className="grid two">
+      <form
+        className="panel"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setStatus("Creating user...");
+          void onCreate({ email, name, role, password })
+            .then(() => {
+              setStatus("User registered in D1.");
+              setEmail("");
+              setName("");
+              setPassword("");
+              setRole("member");
+            })
+            .catch((error: unknown) =>
+              setStatus(error instanceof Error ? error.message : String(error)),
+            );
+        }}
+      >
+        <h3>Register User</h3>
+        <label>
+          Email
+          <input value={email} onChange={(event) => setEmail(event.target.value)} />
+        </label>
+        <label>
+          Name
+          <input value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label>
+          Role
+          <select value={role} onChange={(event) => setRole(event.target.value)}>
+            <option value="member">member</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
+        <label>
+          Temporary password
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </label>
+        <button type="submit">Create user</button>
+        <div className="status compact">{status}</div>
+      </form>
+
+      <div className="panel list">
+        <h3>Dashboard Users</h3>
+        {users.map((dashboardUser) => (
+          <article className="row" key={dashboardUser.id}>
+            <div>
+              <strong>{dashboardUser.email}</strong>
+              <span>
+                {dashboardUser.name ?? "No name"} · {dashboardUser.role}
+              </span>
+            </div>
+            <span>{dashboardUser.lastLoginAt ? new Date(dashboardUser.lastLoginAt).toLocaleString() : "Never logged in"}</span>
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -745,6 +936,7 @@ function TestEventSender({
 
 function titleForView(view: View): string {
   return {
+    overview: "Application Overview",
     triggers: "Trigger Management",
     templates: "Template Editor",
     logs: "Delivery Logs",
